@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Security.Permissions;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using BenchmarkDotNet.Attributes;
@@ -12,25 +13,24 @@ using System.Threading.Tasks;
 namespace CacheBench
 {
 
-    enum SCENARIO { ParallelDictionary, FASTER };
-
     [Command(Name = "CacheBench", Description = "A simple set of benchmarks for relationship data caches.")]
     [HelpOption("-?")]
     public class Program
     {
-
         [Option(Description = "Run Benchmarks (run if -b is used)")]
         public Boolean Benchmark { get; }
 
         [Option("-t|--type", Description = "[ParallelDictionary|FASTER]")]
         public string CacheType { get; }
 
+        [Option("-d|--datafile", Description = "csv data file for load")]
+        public string DataFile { get; } = "./relationships_small.csv";
+
         public static void Main(string[] args)
             => CommandLineApplication.Execute<Program>(args);
 
         private void OnExecute(CommandLineApplication app)
         {
-
             if (string.IsNullOrEmpty(CacheType))
             {
                 app.ShowHelp();
@@ -39,7 +39,6 @@ namespace CacheBench
 
             if (Benchmark)
             {
-
                 Console.WriteLine($"Running Benchmarks for {CacheType}!");
                 BenchmarkRunner.Run<ConcurrentDictionaryCache>();
             }
@@ -48,10 +47,8 @@ namespace CacheBench
                 if (CacheType.Equals("ParallelDictionary"))
                 {
                     Console.WriteLine($"Starting paraellel dictionary workload.");
-
                     ConcurrentDictionaryCache pdc = new ConcurrentDictionaryCache();
-
-                    pdc.BuildCache();
+                    pdc.BuildCache(DataFile);
                 }
                 else if (CacheType.Equals("FASTER"))
                 {
@@ -76,22 +73,22 @@ namespace CacheBench
 
         ConcurrentDictionary<Guid, ConcurrentBag<Guid>> cd;
 
-        public ConcurrentDictionaryCache()
-        {
-            //BuildCache();
-        }
-
-        public ConcurrentDictionaryCache(string[] args)
-        {
-            //BuildCache();
-        }
-
         [Benchmark]
-        public void BuildCache()
+        public void BuildCache(string DataFile)
         {
+
+            Console.WriteLine($"Starting paraellel dictionary workload.");
             cd = new ConcurrentDictionary<Guid, ConcurrentBag<Guid>>(concurrencyLevel, initialCapacity);
 
-            using (var reader = new StreamReader("./bigone.csv"))
+            FileInfo fInfo = new FileInfo(DataFile);
+
+            if (!fInfo.Exists)
+            {
+                Console.Out.WriteLine("DataFile does not exist.");
+                return;
+            }
+
+            using (var reader = new StreamReader("./relationships_small.csv"))
             using (var csv = new CsvReader(reader))
             {
                 csv.Configuration.HasHeaderRecord = false;
@@ -113,17 +110,17 @@ namespace CacheBench
                 int x = 0;
 
                 System.Threading.Tasks.Parallel.ForEach(records, (currentRecord) =>
+                {
+                    x++;
+
+                    if (x%10 == 0)
                     {
-                        x++;
+                        Console.WriteLine("A Processing Record {0} ", x);
+                    }
 
-                        if (x % 1 == 1000)
-                        {
-                            Console.WriteLine("Processing Record {0} ", x);
-                        }
+                    cd.AddOrUpdate<Guid>(currentRecord.FromGuid, addListFunc, addUpdateListFunc, currentRecord.ToGuid);
 
-                        cd.AddOrUpdate<Guid>(currentRecord.FromGuid, addListFunc, addUpdateListFunc, currentRecord.ToGuid);
-
-                    });
+                });
             }
         }
 
@@ -138,7 +135,7 @@ namespace CacheBench
 
                 var existants = cd.TryGetValue(lookupGuid, out toGuids);
 
-                if (toGuids.Count > 3)
+                if (existants && toGuids.Count > 0)
                 {
                     foreach (var h in toGuids)
                     {
