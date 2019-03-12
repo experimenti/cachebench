@@ -14,7 +14,6 @@ namespace CacheBench
 
     enum SCENARIO { ParallelDictionary, FASTER };
 
-
     [Command(Name = "CacheBench", Description = "A simple set of benchmarks for relationship data caches.")]
     [HelpOption("-?")]
     public class Program
@@ -75,11 +74,11 @@ namespace CacheBench
     [RPlotExporter, RankColumn]
     public class ParallelDictionaryCache
     {
-            int initialCapacity = 6000000;
-            static int numProcs = Environment.ProcessorCount;
-            int concurrencyLevel = numProcs * 4;
+        int initialCapacity = 6000000;
+        static int numProcs = Environment.ProcessorCount;
+        int concurrencyLevel = numProcs * 4;
 
-            ConcurrentDictionary<Guid, ConcurrentBag<Guid>> cd; 
+        ConcurrentDictionary<Guid, ConcurrentBag<Guid>> cd;
 
         public ParallelDictionaryCache()
         {
@@ -102,13 +101,11 @@ namespace CacheBench
                 csv.Configuration.HasHeaderRecord = false;
                 var records = csv.GetRecords<RelationshipRecord>();
 
-
                 Func<Guid, ConcurrentBag<Guid>, Guid, ConcurrentBag<Guid>> addUpdateListFunc = ((g, k, l) =>
                 {
                     k.Add(l);
                     return k;
                 });
-
 
                 Func<Guid, Guid, ConcurrentBag<Guid>> addListFunc = ((k, v) =>
                 {
@@ -145,9 +142,12 @@ namespace CacheBench
 
                 var existants = cd.TryGetValue(lookupGuid, out toGuids);
 
-                if (toGuids.Count > 10)
+                if (toGuids.Count > 1)
                 {
-                    Console.WriteLine("Guid {0}, has {1} related guids");
+                    foreach (var h in toGuids)
+                    {
+                        Console.WriteLine("Guid {0}, has {1} related guids", lookupGuid);
+                    }
                 }
             });
         }
