@@ -40,6 +40,7 @@ namespace CacheBench
 
             if (Benchmark)
             {
+
                 Console.WriteLine($"Running Benchmarks for {CacheType}!");
                 BenchmarkRunner.Run<ParallelDictionaryCache>();
             }
@@ -74,6 +75,12 @@ namespace CacheBench
     [RPlotExporter, RankColumn]
     public class ParallelDictionaryCache
     {
+            int initialCapacity = 6000000;
+            static int numProcs = Environment.ProcessorCount;
+            int concurrencyLevel = numProcs * 4;
+
+            ConcurrentDictionary<Guid, ConcurrentBag<Guid>> cd; 
+
         public ParallelDictionaryCache()
         {
             //BuildCache();
@@ -87,12 +94,7 @@ namespace CacheBench
         [Benchmark]
         public async Task BuildCache()
         {
-            int initialCapacity = 6000000;
-            int numProcs = Environment.ProcessorCount;
-            int concurrencyLevel = numProcs * 4;
-
-            ConcurrentDictionary<Guid, ConcurrentBag<Guid>> cd = new ConcurrentDictionary<Guid, ConcurrentBag<Guid>>(concurrencyLevel, initialCapacity);
-
+            cd = new ConcurrentDictionary<Guid, ConcurrentBag<Guid>>(concurrencyLevel, initialCapacity);
 
             using (var reader = new StreamReader("./relationships_eleven.csv"))
             using (var csv = new CsvReader(reader))
@@ -133,15 +135,15 @@ namespace CacheBench
         }
 
         [Benchmark]
-        public async Task QueryCache(ConcurrentDictionary<Guid, ConcurrentBag<Guid>> pdc)
+        public async Task QueryCache()
         {
 
-            System.Threading.Tasks.Parallel.ForEach(pdc, y =>
+            System.Threading.Tasks.Parallel.ForEach(cd, y =>
             {
                 ConcurrentBag<Guid> toGuids;
                 var lookupGuid = y.Key;
 
-                var existants = pdc.TryGetValue(lookupGuid, out toGuids);
+                var existants = cd.TryGetValue(lookupGuid, out toGuids);
 
                 if (toGuids.Count > 10)
                 {
