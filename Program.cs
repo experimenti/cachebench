@@ -67,13 +67,16 @@ namespace CacheBench
     public class ConcurrentDictionaryCache
     {
 
+        [Params(1000, 100000)]
+        public int LOOKUP_COUNT;
+
         int initialCapacity = 100000;
         static int numProcs = Environment.ProcessorCount;
-        int concurrencyLevel = numProcs * 4;
+        int concurrencyLevel = numProcs * 6;
 
         ConcurrentDictionary<Guid, ConcurrentBag<Guid>> cd;
 
-        public string DataFile { get; } = "./relationships_small.csv";
+        public string DataFile { get; set; } = "./relationships_small.csv";
 
         public ConcurrentDictionaryCache()
         {
@@ -82,7 +85,7 @@ namespace CacheBench
 
         public ConcurrentDictionaryCache(string datafile)
         {
-            datafile = DataFile;
+            DataFile = datafile;
 
         }
 
@@ -100,7 +103,7 @@ namespace CacheBench
                 throw new Exception("Datafile does not exist");
             }
 
-            using (var reader = new StreamReader("./relationships_small.csv"))
+            using (var reader = new StreamReader(DataFile))
             using (var csv = new CsvReader(reader))
             {
                 csv.Configuration.HasHeaderRecord = false;
@@ -121,16 +124,16 @@ namespace CacheBench
 
                 int x = 0;
 
+
                 System.Threading.Tasks.Parallel.ForEach(records, (currentRecord) =>
                 {
                     x++;
 
-                    if (x % 1000 == 0)
+                    //generate benchmark range
+                    if (x < LOOKUP_COUNT)
                     {
-                        Console.WriteLine("A Processing Record {0} ", x);
+                        cd.AddOrUpdate<Guid>(currentRecord.FromGuid, addListFunc, addUpdateListFunc, currentRecord.ToGuid);
                     }
-
-                    cd.AddOrUpdate<Guid>(currentRecord.FromGuid, addListFunc, addUpdateListFunc, currentRecord.ToGuid);
 
                 });
             }
@@ -144,13 +147,15 @@ namespace CacheBench
 
             var cd = BuildCache();
 
+
+
+
             System.Threading.Tasks.Parallel.ForEach(cd, (y) =>
             {
                 var existants = cd.TryGetValue(y.Key, out ConcurrentBag<Guid> toGuids);
 
-                if (existants && toGuids.Count > 2)
+                if (existants && toGuids.Count > 1)
                 {
-
                     //Do just a bit of work here
                     if (toGuids.Count > 5)
                     {
