@@ -25,23 +25,23 @@ namespace CacheBench
         [Option("-t|--type", Description = "[ParallelDictionary|FASTER]")]
         public string CacheType { get; }
 
-        public static Task<int> Main(string[] args)
-            => CommandLineApplication.ExecuteAsync<Program>(args);
+        public static void Main(string[] args)
+            => CommandLineApplication.Execute<Program>(args);
 
-        private async Task<int> OnExecuteAsync(CommandLineApplication app)
+        private void OnExecute(CommandLineApplication app)
         {
 
             if (string.IsNullOrEmpty(CacheType))
             {
                 app.ShowHelp();
-                return 0;
+                return;
             }
 
             if (Benchmark)
             {
 
                 Console.WriteLine($"Running Benchmarks for {CacheType}!");
-                BenchmarkRunner.Run<ParallelDictionaryCache>();
+                BenchmarkRunner.Run<ConcurrentDictionaryCache>();
             }
             else
             {
@@ -49,12 +49,9 @@ namespace CacheBench
                 {
                     Console.WriteLine($"Starting paraellel dictionary workload.");
 
-                    ParallelDictionaryCache pdc = new ParallelDictionaryCache();
+                    ConcurrentDictionaryCache pdc = new ConcurrentDictionaryCache();
 
-                    await Task.Run(async () =>
-                    {
-                        await pdc.BuildCache();
-                    });
+                    pdc.BuildCache();
                 }
                 else if (CacheType.Equals("FASTER"))
                 {
@@ -66,36 +63,35 @@ namespace CacheBench
                     Console.WriteLine($"Undefined CacheType {CacheType}!");
                 }
             }
-            return 1;
         }
     }
 
     [ClrJob(baseline: true), CoreJob]
     [RPlotExporter, RankColumn]
-    public class ParallelDictionaryCache
+    public class ConcurrentDictionaryCache
     {
-        int initialCapacity = 6000000;
+        int initialCapacity = 100000;
         static int numProcs = Environment.ProcessorCount;
         int concurrencyLevel = numProcs * 4;
 
         ConcurrentDictionary<Guid, ConcurrentBag<Guid>> cd;
 
-        public ParallelDictionaryCache()
+        public ConcurrentDictionaryCache()
         {
             //BuildCache();
         }
 
-        public ParallelDictionaryCache(string[] args)
+        public ConcurrentDictionaryCache(string[] args)
         {
             //BuildCache();
         }
 
         [Benchmark]
-        public async Task BuildCache()
+        public void BuildCache()
         {
             cd = new ConcurrentDictionary<Guid, ConcurrentBag<Guid>>(concurrencyLevel, initialCapacity);
 
-            using (var reader = new StreamReader("./relationships_eleven.csv"))
+            using (var reader = new StreamReader("./bigone.csv"))
             using (var csv = new CsvReader(reader))
             {
                 csv.Configuration.HasHeaderRecord = false;
@@ -120,7 +116,7 @@ namespace CacheBench
                     {
                         x++;
 
-                        if (x % 1 == 0)
+                        if (x % 1 == 1000)
                         {
                             Console.WriteLine("Processing Record {0} ", x);
                         }
@@ -132,7 +128,7 @@ namespace CacheBench
         }
 
         [Benchmark]
-        public async Task QueryCache()
+        public void QueryCache()
         {
 
             System.Threading.Tasks.Parallel.ForEach(cd, y =>
@@ -142,11 +138,11 @@ namespace CacheBench
 
                 var existants = cd.TryGetValue(lookupGuid, out toGuids);
 
-                if (toGuids.Count > 1)
+                if (toGuids.Count > 3)
                 {
                     foreach (var h in toGuids)
                     {
-                        Console.WriteLine("Guid {0}, has {1} related guids", lookupGuid);
+                        Console.WriteLine("Guid {0}, has {1} related guids", lookupGuid, h);
                     }
                 }
             });
