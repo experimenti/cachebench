@@ -40,15 +40,14 @@ namespace CacheBench
             if (Benchmark)
             {
                 Console.WriteLine($"Running Benchmarks for {CacheType}!");
-                BenchmarkRunner.Run<ConcurrentDictionaryCache>();
+                BenchmarkSwitcher.FromAssembly(typeof(ConcurrentDictionaryCache).Assembly).Run(new string[] { DataFile });
             }
             else
             {
                 if (CacheType.Equals("ParallelDictionary"))
                 {
-                    Console.WriteLine($"Starting paraellel dictionary workload.");
-                    ConcurrentDictionaryCache pdc = new ConcurrentDictionaryCache();
-                    pdc.BuildCache(DataFile);
+                    ConcurrentDictionaryCache pdc = new ConcurrentDictionaryCache(DataFile);
+                    pdc.QueryCache();
                 }
                 else if (CacheType.Equals("FASTER"))
                 {
@@ -67,25 +66,38 @@ namespace CacheBench
     [RPlotExporter, RankColumn]
     public class ConcurrentDictionaryCache
     {
+
         int initialCapacity = 100000;
         static int numProcs = Environment.ProcessorCount;
         int concurrencyLevel = numProcs * 4;
 
         ConcurrentDictionary<Guid, ConcurrentBag<Guid>> cd;
 
+        public string DataFile { get; } = "./relationships_small.csv";
+
+        public ConcurrentDictionaryCache()
+        {
+        }
+
+
+        public ConcurrentDictionaryCache(string datafile)
+        {
+            datafile = DataFile;
+
+        }
+
+
         [Benchmark]
-        public void BuildCache(string DataFile)
+        public ConcurrentDictionary<Guid, ConcurrentBag<Guid>> BuildCache()
         {
 
-            Console.WriteLine($"Starting paraellel dictionary workload.");
             cd = new ConcurrentDictionary<Guid, ConcurrentBag<Guid>>(concurrencyLevel, initialCapacity);
 
             FileInfo fInfo = new FileInfo(DataFile);
 
             if (!fInfo.Exists)
             {
-                Console.Out.WriteLine("DataFile does not exist.");
-                return;
+                throw new Exception("Datafile does not exist");
             }
 
             using (var reader = new StreamReader("./relationships_small.csv"))
@@ -113,7 +125,7 @@ namespace CacheBench
                 {
                     x++;
 
-                    if (x%10 == 0)
+                    if (x % 1000 == 0)
                     {
                         Console.WriteLine("A Processing Record {0} ", x);
                     }
@@ -122,30 +134,37 @@ namespace CacheBench
 
                 });
             }
+
+            return cd;
         }
 
         [Benchmark]
         public void QueryCache()
         {
 
-            System.Threading.Tasks.Parallel.ForEach(cd, y =>
+            var cd = BuildCache();
+
+            System.Threading.Tasks.Parallel.ForEach(cd, (y) =>
             {
-                ConcurrentBag<Guid> toGuids;
-                var lookupGuid = y.Key;
+                var existants = cd.TryGetValue(y.Key, out ConcurrentBag<Guid> toGuids);
 
-                var existants = cd.TryGetValue(lookupGuid, out toGuids);
-
-                if (existants && toGuids.Count > 0)
+                if (existants && toGuids.Count > 2)
                 {
-                    foreach (var h in toGuids)
+
+                    //Do just a bit of work here
+                    if (toGuids.Count > 5)
                     {
-                        Console.WriteLine("Guid {0}, has {1} related guids", lookupGuid, h);
+                        Console.WriteLine("Large(ish) relationship. Guid {0}, has {1} related guids", y.Key, toGuids.Count);
+
+                        foreach (var h in toGuids)
+                        {
+                            Console.WriteLine("Guid {0}, has to guid {1} ", y.Key, h);
+                        }
                     }
                 }
             });
         }
     }
-
 
     public class RelationshipRecord
     {
